@@ -1,0 +1,295 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WekToDo - 今天一定做</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="custom-titlebar" id="titlebar">
+        <div class="titlebar-content">
+            <span class="app-title">WekToDo - 今天一定做</span>
+            <div class="opacity-control">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 1C4.13 1 1 4.13 1 8s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                </svg>
+                <input type="range" id="opacity-slider" min="30" max="100" value="90" title="调整透明度">
+                <span id="opacity-value">90%</span>
+            </div>
+            <div class="titlebar-controls">
+                <button class="titlebar-btn" id="pin-btn" title="窗口置顶">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 1v10M3 5h12M4 6v8c0 1 .5 2 1.5 2h7c1 0 1.5-1 1.5-2V6"/>
+                    </svg>
+                </button>
+                <button class="titlebar-btn" id="theme-btn" title="调整主题颜色">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 2.5a4.5 4.5 0 0 1 4.5 4.5c0 .79-.2 1.53-.54 2.17l-4.79 7.52a.85.85 0 0 1-1.44 0L1.94 9.17A4.5 4.5 0 0 1 9 2.5Z"/>
+                        <circle cx="9" cy="7" r="1.6" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+                <button class="titlebar-btn" id="minimize-btn" title="最小化">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 9h12"/>
+                    </svg>
+                </button>
+                <button class="titlebar-btn" id="maximize-btn" title="最大化">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 3h12v12H3z"/>
+                    </svg>
+                </button>
+                <button class="titlebar-btn close" id="close-btn" title="关闭">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                        <path d="M4.5 4.5l9 9m0-9l-9 9"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="window-resizer top"></div>
+    <div class="window-resizer bottom"></div>
+    <div class="window-resizer left"></div>
+    <div class="window-resizer right"></div>
+    <div class="window-resizer top-left"></div>
+    <div class="window-resizer top-right"></div>
+    <div class="window-resizer bottom-left"></div>
+    <div class="window-resizer bottom-right"></div>
+
+    <div id="app">
+        <div class="container">
+            <aside class="sidebar">
+                <div class="filter-buttons">
+                    <button class="filter-btn" :class="{ active: currentFilter === 'all' }" @click="filterTasks('all')">全部</button>
+                    <button class="filter-btn" :class="{ active: currentFilter === 'today' }" @click="filterTasks('today')">今天</button>
+                    <button
+                        class="filter-btn plan-entry"
+                        :class="{ active: currentFilter === 'plan-irregular' || currentFilter === 'plan-regular' || currentFilter === 'plan-date' || currentFilter === 'daily' }"
+                        @click.stop="filterTasks('plan')"
+                        ref="planEntryButton"
+                    >
+                        计划
+                    </button>
+
+                    <template v-if="currentFilter === 'plan-date'">
+                        <button
+                            class="filter-btn plan-date-btn"
+                            :class="{ active: currentFilter === 'plan-date' && selectedid === item.date }"
+                            v-for="item in futurePlanList"
+                            :key="'future-' + item.date"
+                            @click="selectFuturePlanTasks(item.date)"
+                        >
+                            {{ formatDate(item.date) }}
+                        </button>
+                    </template>
+
+                    <template v-if="currentFilter !== 'plan-date' && currentFilter !== 'plan-irregular'">
+                        <button
+                            class="filter-btn"
+                            v-for="item in historyList"
+                            :key="'history-' + item.date"
+                            @click="selectHistoryTasks(item.date)"
+                        >
+                            {{ formatDate(item.date) }}
+                        </button>
+                    </template>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <div class="header">
+                    <h1>我的待办</h1>
+                    <p v-if="currentFilter === 'daily'" class="plan-date-tip">
+                        定期计划：在这里新增的内容会每天自动加入当天任务
+                    </p>
+                    <p v-if="currentFilter === 'plan-irregular'" class="plan-date-tip">
+                        不定期计划：像任务清单一样记录待做计划
+                    </p>
+                    <p v-if="currentFilter === 'plan-date' && selectedid" class="plan-date-tip">
+                        当前计划日期：{{ selectedid }}
+                    </p>
+                </div>
+
+                <div class="input-section">
+                    <input
+                        type="text"
+                        v-model="newTaskTitle"
+                        @keyup.enter="addTask"
+                        placeholder="输入新的待办事项..."
+                        class="task-input"
+                    >
+                    <button @click="addTask" class="add-btn">+ 添加</button>
+                </div>
+
+                <div class="task-list">
+                    <div v-if="filteredTasks.length === 0" class="empty-state">
+                        <p>暂无待办事项</p>
+                    </div>
+
+                    <div v-for="task in filteredTasks" :key="task.id" class="task-item" :class="{ completed: task.completed }">
+                        <input
+                            v-if="currentFilter !== 'daily'"
+                            type="checkbox"
+                            :checked="task.completed"
+                            @click.stop
+                            @change="toggleTaskStatus(task.id, !task.completed)"
+                            class="task-checkbox"
+                        >
+                        <span v-else class="daily-badge">每日</span>
+                        <span
+                            v-if="editingTaskId !== task.id"
+                            class="task-title editable"
+                            @click="startEditTask(task)"
+                        >
+                            {{ task.title }}
+                        </span>
+                        <input
+                            v-else
+                            :ref="'taskEditInput-' + task.id"
+                            type="text"
+                            v-model="editingTitle"
+                            class="task-edit-input"
+                            @click.stop
+                            @keyup.enter="saveEditTask(task.id)"
+                            @keyup.esc="cancelEditTask"
+                            @blur="saveEditTask(task.id)"
+                        >
+                        <button @click.stop="deleteTask(task.id)" class="delete-btn">删除</button>
+                    </div>
+                </div>
+
+                <div class="stats">
+                    <p>共 <strong>{{ filteredTasks.length }}</strong> 个任务，已完成 <strong>{{ completedCount }}</strong> 个</p>
+                </div>
+                <div class="footer-tip">技术支持 vx: yk233666</div>
+            </main>
+        </div>
+
+        <div
+            v-if="showPlanBranches"
+            class="plan-menu plan-menu-popup"
+            ref="planMenuPanel"
+            :style="planMenuStyle"
+            @click.stop
+        >
+            <button
+                class="plan-menu-item"
+                :class="{ active: currentFilter === 'plan-irregular' }"
+                @click="filterTasks('plan-irregular')"
+            >
+                不定期计划
+            </button>
+            <button
+                class="plan-menu-item"
+                :class="{ active: currentFilter === 'plan-regular' || currentFilter === 'plan-date' }"
+                @click="filterTasks('plan-regular')"
+            >
+                定期计划
+            </button>
+            <button
+                class="plan-menu-item"
+                :class="{ active: currentFilter === 'daily' }"
+                @click="filterTasks('daily')"
+            >
+                每日计划
+            </button>
+        </div>
+
+        <div v-if="showCalendar" class="calendar-modal-overlay" @click="closeCalendar">
+            <div class="calendar-modal" @click.stop>
+                <div class="calendar-mode-title">
+                    {{ calendarMode === 'plan' ? '未来规划' : '历史代办' }}
+                </div>
+                <div class="calendar-header">
+                    <button @click="navigateMonth(-1)" class="nav-btn">‹</button>
+                    <div class="month-year">
+                        <select v-model.number="currentYear" class="year-select">
+                            <option v-for="year in [2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030]" :key="year" :value="year">
+                                {{ year }}
+                            </option>
+                        </select>
+                        <select v-model.number="currentMonth" class="month-select">
+                            <option :value="1">1月</option>
+                            <option :value="2">2月</option>
+                            <option :value="3">3月</option>
+                            <option :value="4">4月</option>
+                            <option :value="5">5月</option>
+                            <option :value="6">6月</option>
+                            <option :value="7">7月</option>
+                            <option :value="8">8月</option>
+                            <option :value="9">9月</option>
+                            <option :value="10">10月</option>
+                            <option :value="11">11月</option>
+                            <option :value="12">12月</option>
+                        </select>
+                    </div>
+                    <button @click="navigateMonth(1)" class="nav-btn">›</button>
+                    <button @click="showCompletedMarks = !showCompletedMarks" class="completed-btn" :class="{ active: showCompletedMarks }" title="标记已完成日期">✓</button>
+                    <button @click="closeCalendar" class="close-btn">×</button>
+                </div>
+
+                <div class="calendar-weekdays">
+                    <div class="weekday">日</div>
+                    <div class="weekday">一</div>
+                    <div class="weekday">二</div>
+                    <div class="weekday">三</div>
+                    <div class="weekday">四</div>
+                    <div class="weekday">五</div>
+                    <div class="weekday">六</div>
+                </div>
+
+                <div class="calendar-days">
+                    <div
+                        v-for="(day, index) in calendarDays"
+                        :key="index"
+                        class="calendar-day"
+                        :class="{
+                            'other-month': !day.isCurrentMonth,
+                            'has-task': calendarMode !== 'plan' && day.hasTask,
+                            'no-task': calendarMode !== 'plan' && day.isCurrentMonth && !day.hasTask,
+                            'plan-clickable': calendarMode === 'plan' && day.isCurrentMonth && day.isClickable,
+                            'plan-disabled': calendarMode === 'plan' && day.isCurrentMonth && !day.isClickable,
+                            'all-completed': day.allCompleted && showCompletedMarks,
+                            'clickable': day.isClickable
+                        }"
+                        @click="selectDateFromCalendar(day)"
+                    >
+                        <span class="day-text">{{ day.day }}</span>
+                        <span v-if="day.allCompleted && showCompletedMarks" class="completed-mark">✓</span>
+                    </div>
+                </div>
+
+                <button class="view-all-btn" @click="showAllTasksInCalendar">查看所有</button>
+            </div>
+        </div>
+
+        <div v-if="showThemePicker" class="theme-modal-overlay" @click="closeThemePicker">
+            <div class="theme-modal" @click.stop>
+                <div class="theme-modal-header">
+                    <h3>调整整体颜色</h3>
+                    <button class="theme-close-btn" @click="closeThemePicker">×</button>
+                </div>
+
+                <div class="theme-picker-body">
+                    <label class="theme-picker-label">选择主题色</label>
+                    <input type="color" v-model="pendingThemeColor" class="theme-color-input">
+                    <div class="theme-preview-row">
+                        <span>预览颜色</span>
+                        <span class="theme-preview-swatch" :style="{ backgroundColor: pendingThemeColor }"></span>
+                        <span class="theme-preview-code">{{ pendingThemeColor }}</span>
+                    </div>
+                </div>
+
+                <div class="theme-modal-actions">
+                    <button class="theme-action-btn secondary" @click="resetThemeColor">恢复默认</button>
+                    <button class="theme-action-btn primary" @click="applyThemeColor">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
